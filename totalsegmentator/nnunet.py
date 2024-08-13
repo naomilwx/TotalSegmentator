@@ -42,8 +42,9 @@ from totalsegmentator.cropping import crop_to_mask_nifti, undo_crop_nifti
 from totalsegmentator.cropping import crop_to_mask, undo_crop
 from totalsegmentator.postprocessing import remove_outside_of_mask, extract_skin, remove_auxiliary_labels
 from totalsegmentator.postprocessing import keep_largest_blob_multilabel, remove_small_blobs_multilabel
+
 from totalsegmentator.nifti_ext_header import save_multilabel_nifti, add_label_map_to_nifti
-from totalsegmentator.statistics import get_basic_statistics
+from totalsegmentator.statistics import save_basic_statistics
 
 # Hide nnunetv2 warning: Detected old nnU-Net plans format. Attempting to reconstruct network architecture...
 warnings.filterwarnings("ignore", category=UserWarning, module="nnunetv2")
@@ -583,9 +584,10 @@ def nnUNet_predict_image(file_in: Union[str, Path, Nifti1Image], file_out, task_
                 stats_file = stats_dir / "statistics.json"
             else:
                 stats_file = None
-            stats = get_basic_statistics(img_pred.get_fdata(), img_in_rsp, stats_file, 
+            stats = save_basic_statistics(img_pred.get_fdata(), img_in_rsp, stats_file, 
                                          quiet, task_name, exclude_masks_at_border, roi_subset,
                                          metric=stats_aggregation)
+
             if not quiet: print(f"  calculated in {time.time()-st:.2f}s")
 
         if resample is not None:

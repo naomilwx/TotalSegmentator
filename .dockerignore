@@ -6,3 +6,12 @@
 # db/api_keys.txt
 # db/server_config.txt
 # tmp_weights
+**/.git
+**/.DS_Store
+Dockerfile
+Dockerfile-original
+tests/*
+total-segmentator.tar
+total-segmentator.tar.gz
+.github
+resources/imgs/*

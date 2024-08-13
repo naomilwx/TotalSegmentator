@@ -35,8 +35,9 @@ def main():
 
     parser.add_argument("-nr", "--nr_thr_resamp", type=int, help="Nr of threads for resampling", default=1)
 
-    parser.add_argument("-ns", "--nr_thr_saving", type=int, help="Nr of threads for saving segmentations",
-                        default=6)
+
+    parser.add_argument("-ns", "--nr_thr_saving", type=int, help="Nr of threads for saving segmentations", 
+                        default=1)
 
     parser.add_argument("-f", "--fast", action="store_true", help="Run faster lower resolution model (3mm)",
                         default=False)
@@ -138,14 +139,13 @@ def main():
 
     args = parser.parse_args()
 
-    totalsegmentator(args.input, args.output, args.ml, args.nr_thr_resamp, args.nr_thr_saving,
-                     args.fast, args.nora_tag, args.preview, args.task, args.roi_subset,
-                     args.statistics, args.radiomics, args.crop_path, args.body_seg,
-                     args.force_split, args.output_type, args.quiet, args.verbose, args.test, args.skip_saving,
-                     args.device, args.license_number, not args.stats_include_incomplete,
-                     args.no_derived_masks, args.v1_order, args.fastest, args.roi_subset_robust,
-                     "mean", args.remove_small_blobs)
-
+    print('running ts', args)
+    totalsegmentator(args.input, args.output, ml=args.ml, nr_thr_resamp=args.nr_thr_resamp, nr_thr_saving=args.nr_thr_saving,
+                     fast=args.fast, nora_tag=args.nora_tag, preview=args.preview, task=args.task, roi_subset=args.roi_subset,
+                     statistics=args.statistics, radiomics=args.radiomics, crop_path=args.crop_path, body_seg=args.body_seg,
+                     force_split=args.force_split, output_type=args.output_type, quiet=args.quiet, verbose=args.verbose, test=args.test, skip_saving=args.skip_saving,
+                     device=args.device, license_number=args.license_number, statistics_exclude_masks_at_border=not args.stats_include_incomplete,
+                     no_derived_masks=args.no_derived_masks, v1_order=args.v1_order, fastest=args.fastest, roi_subset_robust=args.roi_subset_robust, remove_small_blobs=args.remove_small_blobs)
 
 if __name__ == "__main__":
     main()

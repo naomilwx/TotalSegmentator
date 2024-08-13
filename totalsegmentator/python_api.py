@@ -10,7 +10,8 @@ import numpy as np
 import nibabel as nib
 from nibabel.nifti1 import Nifti1Image
 import torch
-from totalsegmentator.statistics import get_basic_statistics, get_radiomics_features_for_entire_dir
+
+from totalsegmentator.statistics import save_basic_statistics, get_radiomics_features_for_entire_dir, save_statistics_in_range, get_segment_range
 from totalsegmentator.libs import download_pretrained_weights
 from totalsegmentator.config import setup_nnunet, setup_totalseg, increase_prediction_counter
 from totalsegmentator.config import send_usage_stats, set_license_number, has_valid_license_offline
@@ -63,15 +64,16 @@ def show_license_info():
         print(message)
         sys.exit(1)
 
-
-def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Path, None]=None, ml=False, nr_thr_resamp=1, nr_thr_saving=6,
+def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Path, None]=None, ml=False, 
+                     nr_thr_resamp=1, nr_thr_saving=6,
                      fast=False, nora_tag="None", preview=False, task="total", roi_subset=None,
                      statistics=False, radiomics=False, crop_path=None, body_seg=False,
                      force_split=False, output_type="nifti", quiet=False, verbose=False, test=0,
                      skip_saving=False, device="gpu", license_number=None,
                      statistics_exclude_masks_at_border=True, no_derived_masks=False,
-                     v1_order=False, fastest=False, roi_subset_robust=None, stats_aggregation="mean",
-                     remove_small_blobs=False):
+                     stats_out_file='statistics.json',
+                     v1_order=False, fastest=False, roi_subset_robust=None, stats_aggregation="mean", remove_small_blobs=False):
+
     """
     Run TotalSegmentator from within python.
 
@@ -176,20 +178,9 @@ def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Pa
         trainer = "nnUNetTrainer"
         crop = ["lung_upper_lobe_left", "lung_lower_lobe_left", "lung_upper_lobe_right",
                 "lung_middle_lobe_right", "lung_lower_lobe_right"]
-        # if ml: raise ValueError("task lung_vessels does not work with option --ml, because of postprocessing.")
         if fast: raise ValueError("task lung_vessels does not work with option --fast")
         model = "3d_fullres"
         folds = [0]
-    # elif task == "covid":
-    #     task_id = 201
-    #     resample = None
-    #     trainer = "nnUNetTrainer"
-    #     crop = ["lung_upper_lobe_left", "lung_lower_lobe_left", "lung_upper_lobe_right",
-    #             "lung_middle_lobe_right", "lung_lower_lobe_right"]
-    #     model = "3d_fullres"
-    #     folds = [0]
-    #     print("WARNING: The COVID model finds many types of lung opacity not only COVID. Use with care!")
-    #     if fast: raise ValueError("task covid does not work with option --fast")
     elif task == "cerebral_bleed":
         task_id = 150
         resample = None
@@ -300,7 +291,7 @@ def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Pa
         model = "3d_fullres"
         folds = [0]
         if fast: raise ValueError("task vertebrae_body does not work with option --fast")
-        show_license_info()
+        # show_license_info()
     elif task == "heartchambers_highres":
         task_id = 301
         resample = None
@@ -310,7 +301,7 @@ def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Pa
         model = "3d_fullres"
         folds = [0]
         if fast: raise ValueError("task heartchambers_highres does not work with option --fast")
-        show_license_info()
+        # show_license_info()
     elif task == "appendicular_bones":
         task_id = 304
         resample = 1.5
@@ -319,7 +310,7 @@ def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Pa
         model = "3d_fullres"
         folds = [0]
         if fast: raise ValueError("task appendicular_bones does not work with option --fast")
-        show_license_info()
+        # show_license_info()
     elif task == "tissue_types":
         task_id = 481
         resample = 1.5
@@ -328,7 +319,7 @@ def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Pa
         model = "3d_fullres"
         folds = [0]
         if fast: raise ValueError("task tissue_types does not work with option --fast")
-        show_license_info()
+        # show_license_info()
     elif task == "tissue_types_mr":
         task_id = 734
         resample = 1.5
@@ -338,6 +329,7 @@ def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Pa
         folds = [0]
         if fast: raise ValueError("task tissue_types_mr does not work with option --fast")
         show_license_info()
+
     elif task == "face":
         task_id = 303
         resample = 1.5
@@ -346,7 +338,7 @@ def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Pa
         model = "3d_fullres"
         folds = [0]
         if fast: raise ValueError("task face does not work with option --fast")
-        show_license_info()
+        # show_license_info()
     elif task == "face_mr":
         task_id = 737
         resample = 1.5
@@ -366,6 +358,7 @@ def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Pa
         folds = [0]
         if fast: raise ValueError("task brain_structures does not work with option --fast")
         show_license_info()
+
     elif task == "test":
         task_id = [517]
         resample = None
@@ -477,30 +470,36 @@ def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Pa
                             stats_aggregation=stats_aggregation, remove_small_blobs=remove_small_blobs)
     seg = seg_img.get_fdata().astype(np.uint8)
 
-    try:
-        # this can result in error if running multiple processes in parallel because all try to write the same file.
-        # Trying to fix with lock from portalocker did not work. Network drive seems to not support this locking.
-        config = increase_prediction_counter()
-        send_usage_stats(config, {"task": task, "fast": fast, "preview": preview,
-                                "multilabel": ml, "roi_subset": roi_subset,
-                                "statistics": statistics, "radiomics": radiomics})
-    except Exception as e:
-        # print(f"Error while sending usage stats: {e}")
-        pass
+    # try:
+    #     # this can result in error if running multiple processes in parallel because all try to write the same file.
+    #     # Trying to fix with lock from portalocker did not work. Network drive seems to not support this locking.
+    #     config = increase_prediction_counter()
+    #     send_usage_stats(config, {"task": task, "fast": fast, "preview": preview,
+    #                             "multilabel": ml, "roi_subset": roi_subset,
+    #                             "statistics": statistics, "radiomics": radiomics})
+    # except Exception as e:
+    #     # print(f"Error while sending usage stats: {e}")
+    #     pass
+
 
     if statistics:
         if not quiet: print("Calculating statistics...")
         st = time.time()
         if output is not None:
             stats_dir = output.parent if ml else output
-            stats_file = stats_dir / "statistics.json"
+            stats_file = stats_dir / stats_out_file
         else:
             stats_file = None
-        stats = get_basic_statistics(seg, ct_img, stats_file, 
+        stats = save_basic_statistics(seg, ct_img, stats_file, 
                                      quiet, task, statistics_exclude_masks_at_border,
-                                     roi_subset, metric=stats_aggregation)
+                                     roi_subset=roi_subset, metric=stats_aggregation)
         # get_radiomics_features_for_entire_dir(input, output, output / "statistics_radiomics.json")
+
         if not quiet: print(f"  calculated in {time.time()-st:.2f}s")
+
+        min_z, max_z = get_segment_range(seg)
+        mid_z = min_z + (max_z - min_z) // 2
+        save_statistics_in_range(mid_z, mid_z, seg, ct_img, stats_dir / f"l3_{stats_out_file}", task='total')
 
     if radiomics:
         if ml:
@@ -523,3 +522,4 @@ def totalsegmentator(input: Union[str, Path, Nifti1Image], output: Union[str, Pa
         return seg_img, stats
     else:
         return seg_img
+    # return seg_img, ct_img
